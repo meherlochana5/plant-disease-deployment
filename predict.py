@@ -1,53 +1,33 @@
 import tensorflow as tf
 import numpy as np
 import json
-import os
-import gdown
-import zipfile
 from PIL import Image
 from tensorflow.keras.applications.resnet50 import preprocess_input
 
-MODEL_DIR = "models/plant_savedmodel"
-ZIP_PATH = "models/plant_savedmodel.zip"
-FILE_ID = "1dJLrhlVVs7GjvWi1SKRsxiycC97wrAEt"
+# Load TFLite model
+interpreter = tf.lite.Interpreter(model_path="plant_model.tflite")
+interpreter.allocate_tensors()
 
-model = None
-infer = None
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
 
+# Load labels
 with open("class_indices.json", "r") as f:
     labels = json.load(f)
 
 classes = {v: k for k, v in labels.items()}
 
-
-def load_model_once():
-    global model, infer
-
-    if model is None:
-        os.makedirs("models", exist_ok=True)
-
-        if not os.path.exists(MODEL_DIR):
-            url = f"https://drive.google.com/uc?id={FILE_ID}"
-            gdown.download(url, ZIP_PATH, quiet=False)
-
-            with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
-                zip_ref.extractall("models")
-
-        model = tf.saved_model.load(MODEL_DIR)
-        infer = model.signatures["serving_default"]
-
-
 def predict_image(path):
-    load_model_once()
-
     img = Image.open(path).convert("RGB")
     img = img.resize((224, 224))
     img = np.array(img, dtype=np.float32)
     img = preprocess_input(img)
     img = np.expand_dims(img, axis=0)
 
-    pred = infer(tf.constant(img))
-    pred = list(pred.values())[0].numpy()[0]
+    interpreter.set_tensor(input_details[0]["index"], img)
+    interpreter.invoke()
+
+    pred = interpreter.get_tensor(output_details[0]["index"])[0]
 
     idx = np.argmax(pred)
     confidence = round(float(np.max(pred)) * 100, 2)
