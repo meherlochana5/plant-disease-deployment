@@ -11,27 +11,35 @@ MODEL_DIR = "models/plant_savedmodel"
 ZIP_PATH = "models/plant_savedmodel.zip"
 FILE_ID = "1dJLrhlVVs7GjvWi1SKRsxiycC97wrAEt"
 
-os.makedirs("models", exist_ok=True)
+model = None
+infer = None
 
-# Download and extract model
-if not os.path.exists(MODEL_DIR):
-    url = f"https://drive.google.com/uc?id={FILE_ID}"
-    gdown.download(url, ZIP_PATH, quiet=False)
-
-    with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
-        zip_ref.extractall("models")
-
-# Load SavedModel directly
-model = tf.saved_model.load(MODEL_DIR)
-infer = model.signatures["serving_default"]
-
-# Labels
 with open("class_indices.json", "r") as f:
     labels = json.load(f)
 
 classes = {v: k for k, v in labels.items()}
 
+
+def load_model_once():
+    global model, infer
+
+    if model is None:
+        os.makedirs("models", exist_ok=True)
+
+        if not os.path.exists(MODEL_DIR):
+            url = f"https://drive.google.com/uc?id={FILE_ID}"
+            gdown.download(url, ZIP_PATH, quiet=False)
+
+            with zipfile.ZipFile(ZIP_PATH, "r") as zip_ref:
+                zip_ref.extractall("models")
+
+        model = tf.saved_model.load(MODEL_DIR)
+        infer = model.signatures["serving_default"]
+
+
 def predict_image(path):
+    load_model_once()
+
     img = Image.open(path).convert("RGB")
     img = img.resize((224, 224))
     img = np.array(img, dtype=np.float32)
